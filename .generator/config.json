@@ -1,0 +1,65 @@
+{
+  "generatorName": "typescript-nodejs",
+  "answers": {
+    "destination": "/Users/alarner/projects/larner-dev-auth",
+    "name": "@larner.dev/auth",
+    "features": [
+      "publishable",
+      "public"
+    ],
+    "dependencies": [
+      {
+        "name": "@types/jest",
+        "version": "29.2.5",
+        "source": "publishable"
+      },
+      {
+        "name": "@types/node",
+        "version": "18.11.18",
+        "source": "publishable"
+      },
+      {
+        "name": "@typescript-eslint/eslint-plugin",
+        "version": "5.48.1",
+        "source": "publishable"
+      },
+      {
+        "name": "@typescript-eslint/parser",
+        "version": "5.48.1",
+        "source": "publishable"
+      }
+    ],
+    "devDependencies": [
+      {
+        "name": "esbuild",
+        "version": "0.16.16",
+        "source": "default"
+      },
+      {
+        "name": "esbuild-jest",
+        "version": "0.5.0",
+        "source": "default"
+      },
+      {
+        "name": "eslint",
+        "version": "8.31.0",
+        "source": "default"
+      },
+      {
+        "name": "eslint-config-prettier",
+        "version": "8.6.0",
+        "source": "default"
+      },
+      {
+        "name": "jest",
+        "version": "29.3.1",
+        "source": "default"
+      },
+      {
+        "name": "typescript",
+        "version": "4.9.4",
+        "source": "default"
+      }
+    ]
+  }
+}
