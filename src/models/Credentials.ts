@@ -46,27 +46,6 @@ export class CredentialModel extends Model<Credential> {
       ...(args.saltRounds || {}),
     };
   }
-  async validateCredential(
-    data: { userId: string; type: CredentialType; token: string },
-    opts: Required<Transactable>
-  ): Promise<boolean> {
-    const { userId, type, token } = data;
-    const creds = await opts.query<Credential>(
-      "select secret from credentials where user_id = :userId and type = :type and (expires_at is null or expires_at > now())",
-      { userId, type }
-    );
-    return (
-      await Promise.all(creds.rows.map(({ secret }) => compare(token, secret)))
-    ).some((a) => a);
-  }
-  async validateCredentialOrThrow(
-    data: { userId: string; type: CredentialType; token: string },
-    opts: Required<Transactable>
-  ): Promise<void> {
-    if (!(await this.validateCredential(data, opts))) {
-      throw new HTTPError.Unauthorized("UNAUTHORIZED");
-    }
-  }
   async generateToken(
     type: CredentialType.SessionToken | CredentialType.PriveledgedToken,
     length = 32
@@ -82,23 +61,23 @@ export class CredentialModel extends Model<Credential> {
     type: CredentialType.SessionToken | CredentialType.PriveledgedToken,
     maxAgeMinutes: number | null = 525600,
     length = 32,
-    trx?: Transactable
+    opts?: Transactable
   ): Promise<string> {
     const { token, hash: secret } = await this.generateToken(type, length);
     let expiresAt = null;
     if (maxAgeMinutes) {
       expiresAt = new Date(Date.now() + maxAgeMinutes * 60 * 1000);
     }
-    await this.save(
+    const cred = await this.saveAndFetch(
       {
         user_id: userId,
         type,
         secret,
         expires_at: expiresAt,
       },
-      trx
+      opts
     );
-    return token;
+    return `${token}.${cred.id}`;
   }
   async setPassword(
     data: {
@@ -126,5 +105,82 @@ export class CredentialModel extends Model<Credential> {
       type: CredentialType.Password,
       expires_at: data.expiresAt || null,
     });
+  }
+  async validatePassword(
+    data: { userId: string; password: string },
+    opts?: Transactable
+  ): Promise<boolean> {
+    const { userId, password } = data;
+    const cred = await this.fetch(
+      {
+        user_id: userId,
+        type: CredentialType.Password,
+      },
+      opts
+    );
+    if (!cred) {
+      return false;
+    }
+    return await compare(password, cred.secret);
+  }
+  async validatePasswordOrThrow(
+    data: { userId: string; password: string },
+    opts?: Transactable
+  ): Promise<boolean> {
+    const { userId, password } = data;
+    const cred = await this.fetch(
+      {
+        user_id: userId,
+        type: CredentialType.Password,
+      },
+      opts
+    );
+    if (!cred) {
+      return false;
+    }
+    return await compare(password, cred.secret);
+  }
+  async validateToken(
+    data: {
+      userId: string;
+      type: CredentialType.SessionToken | CredentialType.PriveledgedToken;
+      token: string;
+    },
+    opts: Required<Transactable>
+  ): Promise<boolean> {
+    const { userId, type } = data;
+    const pieces = data.token.split(".");
+    if (pieces.length !== 2) {
+      return false;
+    }
+    const hash = pieces[0];
+    const credId = parseInt(pieces[1]);
+    if (isNaN(credId)) {
+      return false;
+    }
+    const cred = await this.fetch(
+      {
+        id: credId,
+        user_id: userId,
+        type,
+      },
+      opts
+    );
+    if (!cred) {
+      return false;
+    }
+    return await compare(hash, cred.secret);
+  }
+  async validateTokenOrThrow(
+    data: {
+      userId: string;
+      type: CredentialType.SessionToken | CredentialType.PriveledgedToken;
+      token: string;
+    },
+    opts: Required<Transactable>
+  ): Promise<void> {
+    if (!(await this.validateToken(data, opts))) {
+      throw new HTTPError.Unauthorized("UNAUTHORIZED");
+    }
   }
 }
