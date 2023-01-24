@@ -10,13 +10,16 @@ export enum CredentialType {
   PriveledgedToken = "PrivilegedToken",
 }
 
-export type Credential = {
+export type PublicCredential = {
   id: number;
   created_at: Date;
   user_id: string;
-  secret: string;
   type: CredentialType;
   expires_at: Date | null;
+};
+
+export type Credential = PublicCredential & {
+  secret: string;
 };
 
 interface ConstructorArgs extends Partial<ModelParams<Credential>> {
@@ -24,6 +27,13 @@ interface ConstructorArgs extends Partial<ModelParams<Credential>> {
   saltRounds?: {
     [key in CredentialType]: number;
   };
+}
+
+interface GenerateAndSaveTokenArgs {
+  userId: string;
+  type: CredentialType.SessionToken | CredentialType.PriveledgedToken;
+  maxAgeMinutes?: number;
+  length?: 32;
 }
 
 export class CredentialModel extends Model<Credential> {
@@ -57,12 +67,12 @@ export class CredentialModel extends Model<Credential> {
     return { token, hash: secret };
   }
   async generateAndSaveToken(
-    userId: string,
-    type: CredentialType.SessionToken | CredentialType.PriveledgedToken,
-    maxAgeMinutes: number | null = 525600,
-    length = 32,
+    args: GenerateAndSaveTokenArgs,
     opts?: Transactable
   ): Promise<string> {
+    const { userId, type } = args;
+    const maxAgeMinutes = args.maxAgeMinutes || 525600;
+    const length = args.length || 32;
     const { token, hash: secret } = await this.generateToken(type, length);
     let expiresAt = null;
     if (maxAgeMinutes) {
@@ -142,34 +152,41 @@ export class CredentialModel extends Model<Credential> {
   }
   async validateToken(
     data: {
-      userId: string;
       type: CredentialType.SessionToken | CredentialType.PriveledgedToken;
       token: string;
     },
-    opts: Required<Transactable>
-  ): Promise<boolean> {
-    const { userId, type } = data;
+    opts?: Transactable
+  ): Promise<PublicCredential | null> {
+    const { type } = data;
     const pieces = data.token.split(".");
     if (pieces.length !== 2) {
-      return false;
+      return null;
     }
     const hash = pieces[0];
     const credId = parseInt(pieces[1]);
     if (isNaN(credId)) {
-      return false;
+      return null;
     }
     const cred = await this.fetch(
       {
         id: credId,
-        user_id: userId,
         type,
       },
       opts
     );
     if (!cred) {
-      return false;
+      return null;
     }
-    return await compare(hash, cred.secret);
+    if (await compare(hash, cred.secret)) {
+      return {
+        id: cred.id,
+        created_at: cred.created_at,
+        user_id: cred.user_id,
+        type: cred.type,
+        expires_at: cred.expires_at,
+      };
+    }
+    return null;
   }
   async validateTokenOrThrow(
     data: {
@@ -177,10 +194,12 @@ export class CredentialModel extends Model<Credential> {
       type: CredentialType.SessionToken | CredentialType.PriveledgedToken;
       token: string;
     },
-    opts: Required<Transactable>
-  ): Promise<void> {
-    if (!(await this.validateToken(data, opts))) {
+    opts?: Transactable
+  ): Promise<PublicCredential> {
+    const cred = await this.validateToken(data, opts);
+    if (!cred) {
       throw new HTTPError.Unauthorized("UNAUTHORIZED");
     }
+    return cred;
   }
 }
