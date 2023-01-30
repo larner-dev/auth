@@ -190,7 +190,6 @@ export class CredentialModel extends Model<Credential> {
   }
   async validateTokenOrThrow(
     data: {
-      userId: string;
       type: CredentialType.SessionToken | CredentialType.PriveledgedToken;
       token: string;
     },
