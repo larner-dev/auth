@@ -154,10 +154,11 @@ export class CredentialModel extends Model<Credential> {
     data: {
       type: CredentialType.SessionToken | CredentialType.PriveledgedToken;
       token: string;
+      deleteAfterValidate?: boolean;
     },
     opts?: Transactable
   ): Promise<PublicCredential | null> {
-    const { type } = data;
+    const { type, deleteAfterValidate } = data;
     const pieces = data.token.split(".");
     if (pieces.length !== 2) {
       return null;
@@ -178,6 +179,9 @@ export class CredentialModel extends Model<Credential> {
       return null;
     }
     if (await compare(hash, cred.secret)) {
+      if (deleteAfterValidate) {
+        await this.hardDelete({ id: cred.id }, opts);
+      }
       return {
         id: cred.id,
         created_at: cred.created_at,
